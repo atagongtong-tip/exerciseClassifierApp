@@ -14,10 +14,10 @@ SEQUENCE_LENGTH = 20
 NUM_FEATURES = 2048
 
 # loading the saved model
-loaded_model = load_model("C:\\Users\\Arvin\\Desktop\\streamlit2\\80.h5")
+loaded_model = load_model("C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\80.h5")
 
 # Specify the list containing the names of the classes used for training.
-CLASSES_LIST = ["Barbel_Biceps_Curl", "Barbell_Row", "Dead_Lift", "Jump_and_Jacks", "Lateral_Raise", "Lunges", "PushUp", "Squat"]
+CLASSES_LIST = ["Barbel_Biceps_Curl", "Barbell_Row", "Dead_Lift", "Jump_and_Jacks", "Lateral_Raise", "Lunges", "PushUp", "Squat", "Deadlift"]
 
 # Create an instance of the ImageDataGenerator for data augmentation
 data_generator = ImageDataGenerator(
@@ -148,18 +148,18 @@ def main():
     st.title('Exercise Classifier App')
     uploaded_file = st.file_uploader("Choose a video...", type=["mp4", "mpeg"])
     if uploaded_file is not None:
-        with open(os.path.join("C:\\Users\\Arvin\\Desktop\\streamlit2\\vidupload\\", uploaded_file.name.split("/")[-1]), "wb") as f:
+        with open(os.path.join("C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\vidupload\\", uploaded_file.name.split("/")[-1]), "wb") as f:
             f.write(uploaded_file.getbuffer())
         st.success("File Uploaded Successfully")
                        
         if st.button('Classify The Video'):
-            output_video_file_path = "C:\\Users\\Arvin\\Desktop\\streamlit2\\vidoutput\\" + uploaded_file.name.split("/")[-1].split(".")[0] + "_output1.mp4"
+            output_video_file_path = "C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\vidoutput\\" + uploaded_file.name.split("/")[-1].split(".")[0] + "_output1.mp4"
             with st.spinner('Wait for it...'):
-                predict_on_video("C:\\Users\\Arvin\\Desktop\\streamlit2\\vidupload\\" + uploaded_file.name.split("/")[-1], output_video_file_path)
-                subprocess.call(['ffmpeg', '-y', '-i', output_video_file_path, '-vcodec', 'libx264', '-f', 'mp4', 'C:\\Users\\Arvin\\Desktop\\streamlit\\vidoutput\\output1.mp4'], shell=True)
+                predict_on_video("C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\vidupload\\" + uploaded_file.name.split("/")[-1], output_video_file_path)
+                subprocess.call(['ffmpeg', '-y', '-i', output_video_file_path, '-vcodec', 'libx264', '-f', 'mp4', 'C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\vidoutput\\output1.mp4'], shell=True)
                 st.success('Done!')
             
-            st.video("C:\\Users\\Arvin\\Desktop\\streamlit2\\vidoutput\\output1.mp4")
+            st.video("C:\\Users\\Arvin\\Desktop\\exerciseClassifierApp\\vidoutput\\output1.mp4")
     
     else:
         st.text("Please upload a video file")
