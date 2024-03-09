@@ -9,8 +9,8 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import keras
 
 # Specify the height and width to which each video frame will be resized in our dataset.
-IMG_SIZE = 75
-SEQUENCE_LENGTH = 20
+IMG_SIZE = 224
+SEQUENCE_LENGTH = 30
 NUM_FEATURES = 2048
 
 # loading the saved model
@@ -67,30 +67,30 @@ def build_feature_extractor():
     outputs = feature_extractor(preprocessed)
     return keras.Model(inputs, outputs, name="feature_extractor")
 
+# Load the feature extractor globally
 feature_extractor = build_feature_extractor()
 
+# Prepare all videos
 def prepare_all_videos(df, root_dir):
     num_samples = len(df)
     video_paths = df["video_name"].values.tolist()
     labels = df["tag"].values
-    # Assuming label_processor is defined somewhere else
-    # labels = label_processor(labels[..., None]).numpy()
 
-    frame_masks = np.zeros(shape=(num_samples, SEQUENCE_LENGTH), dtype="bool")
+    frame_masks = np.zeros(shape=(num_samples, SEQUENCE_LENGTH, NUM_FEATURES), dtype="bool")
     frame_features = np.zeros(shape=(num_samples, SEQUENCE_LENGTH, NUM_FEATURES), dtype="float32")
 
     for idx, path in enumerate(video_paths):
         frames = load_video(os.path.join(root_dir, path))
         frames = frames[None, ...]
 
-        temp_frame_mask = np.zeros(shape=(1, SEQUENCE_LENGTH), dtype="bool")
+        temp_frame_mask = np.zeros(shape=(1, SEQUENCE_LENGTH, NUM_FEATURES), dtype="bool")
         temp_frame_features = np.zeros(shape=(1, SEQUENCE_LENGTH, NUM_FEATURES), dtype="float32")
 
         video_length = frames.shape[1]
 
         # Temporal Padding
         if video_length < SEQUENCE_LENGTH:
-            temp_frame_mask[:, video_length:] = 0
+            temp_frame_mask[:, video_length:, :] = 0
             temp_frame_features[:, video_length:, :] = 0
 
         # Temporal Sampling
@@ -102,13 +102,15 @@ def prepare_all_videos(df, root_dir):
         for i, frame in enumerate(frames[0]):
             frame = data_generator.random_transform(frame)
             temp_frame_features[0, i, :] = feature_extractor.predict(frame[None, ...])
-            temp_frame_mask[0, i] = 1  # 1 = not masked, 0 = masked
+            temp_frame_mask[0, i, :] = 1  # 1 = not masked, 0 = masked
 
         frame_features[idx,] = temp_frame_features.squeeze()
         frame_masks[idx,] = temp_frame_mask.squeeze()
 
     return (frame_features, frame_masks), labels
 
+
+# Predict on video
 def predict_on_video(video_file_path, output_file_path):
     video_reader = cv2.VideoCapture(video_file_path)
     original_video_width = int(video_reader.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -116,7 +118,6 @@ def predict_on_video(video_file_path, output_file_path):
     video_writer = cv2.VideoWriter(output_file_path, cv2.VideoWriter_fourcc('M', 'P', '4', 'V'), 
                                    video_reader.get(cv2.CAP_PROP_FPS), (original_video_width, original_video_height))
     frames_queue = deque(maxlen=SEQUENCE_LENGTH)
-    predicted_class_name = ''
 
     while video_reader.isOpened():
         ok, frame = video_reader.read()
@@ -124,23 +125,38 @@ def predict_on_video(video_file_path, output_file_path):
             break
         resized_frame = cv2.resize(frame, (IMG_SIZE, IMG_SIZE))
         normalized_frame = resized_frame / 255
-        frames_queue.append(normalized_frame)
+        frame_features = feature_extractor.predict(normalized_frame[np.newaxis, ...])
+
+        frames_queue.append(frame_features)
 
         if len(frames_queue) == SEQUENCE_LENGTH:
             # Convert frames_queue to a numpy array and add a batch dimension
-            frames_array = np.array(frames_queue)[np.newaxis, ...]
+            frames_array = np.array(frames_queue)
+            frames_array = np.expand_dims(frames_array, axis=0)  # Add batch dimension
+
             # Create frame masks (all ones) with the same shape as frames_array
-            frame_masks = np.ones_like(frames_array[:, :, :, :, 0])
+            frame_masks = np.ones((frames_array.shape[0], SEQUENCE_LENGTH, NUM_FEATURES))
+
+            if frame_masks.shape != (None, SEQUENCE_LENGTH, NUM_FEATURES):
+                print("Error: Frame masks do not have the correct shape.")
+                return
+
             # Predict using both frames_array and frame_masks
             predicted_labels_probabilities = loaded_model.predict([frames_array, frame_masks])[0]
             predicted_label = np.argmax(predicted_labels_probabilities)
             predicted_class_name = CLASSES_LIST[predicted_label]
 
-        cv2.putText(frame, predicted_class_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            # Draw predicted class name on the frame
+            cv2.putText(frame, predicted_class_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        # Write frame with predicted class name to output video
         video_writer.write(frame)
 
     video_reader.release()
     video_writer.release()
+
+
+
 
 
 # Main Streamlit application
